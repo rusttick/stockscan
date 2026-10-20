@@ -164,8 +164,11 @@ to 6 misread cells is still read correctly, and up to 10 misread cells never
 turn it into a different marker. `stockscan dictionary check` re-verifies
 this and prints the details.
 
-Camera settings: save JPEG (iPhone: Settings → Camera → Formats → Most
-Compatible), main 1× lens, no zoom, macro switching off, no portrait mode.
+Camera settings: main 1× lens, no zoom, macro switching off, no portrait
+mode. JPEG and HEIC both work. Copy photos at full size with their metadata
+(by cable, or AirDrop with *Options → All Photos Data*). The app copes with
+resized, rotated or zoomed photos and, if you choose a calibration for the
+set, with photos whose metadata was removed. The reports say when it had to.
 
 ## Data directory
 

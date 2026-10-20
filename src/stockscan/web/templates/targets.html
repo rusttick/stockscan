@@ -12,31 +12,34 @@
       {% for k, v in items.items() %}<option value="{{ k }}" {{ 'selected' if form.get('item', 'front') == k }}>{{ v }}</option>{% endfor %}
     </select></label>
   <label>Page size
-    <select name="page">
+    <select name="page" id="page">
       {% for k, v in pages.items() %}<option value="{{ k }}" {{ 'selected' if form.get('page', 'letter') == k }}>{{ k }} ({{ '%.1f'|format(v[0]) }} x {{ '%.1f'|format(v[1]) }} in)</option>{% endfor %}
       <option value="custom" {{ 'selected' if form.get('page') == 'custom' }}>custom WxH</option>
     </select>
-    <input name="page_custom" placeholder="e.g. 24x36 or 60x90cm" size="14" value="{{ form.get('page_custom', '') }}"></label>
+  </label>
+  <label id="pagecustom">Custom page size <input name="page_custom" placeholder="e.g. 24x36 or 60x90cm" size="14" value="{{ form.get('page_custom', '') }}"></label>
   <label>Margin <input name="margin" value="{{ form.get('margin', '0.5in') }}" size="7"></label>
 
   <fieldset data-for="front"><legend>Front marker row</legend>
     <label>Marker size <input name="square_front" value="{{ form.get('square_front', sizes.front_marker) }}" size="8"></label>
     <label>Gap between markers <input name="gap" value="{{ form.get('gap', sizes.front_gap) }}" size="8"></label>
     <label>Markers per row (empty = fill the page) <input name="cols" value="{{ form.get('cols', '') }}" size="4" inputmode="numeric"></label>
+    <label>Number of rows <input name="count" value="{{ form.get('count', '1') }}" size="4" inputmode="numeric"></label>
   </fieldset>
   <fieldset data-for="board"><legend>ChArUco board</legend>
     <label>Square size <input name="square_board" value="{{ form.get('square_board', sizes.board_square) }}" size="8"></label>
     <label>Squares down / across (empty = fill the page)
       <span><input name="rows" value="{{ form.get('rows', '') }}" size="4" inputmode="numeric"> x
       <input name="cols_b" value="{{ form.get('cols_b', '') }}" size="4" inputmode="numeric"></span></label>
+    <label>Number of boards <input name="count" value="{{ form.get('count', '1') }}" size="4" inputmode="numeric"></label>
   </fieldset>
   <fieldset data-for="calib"><legend>Calibration board</legend>
     <label>Square size <input name="square_calib" value="{{ form.get('square_calib', sizes.calib_square) }}" size="8"></label>
+    <label>Number of boards <input name="count" value="{{ form.get('count', '1') }}" size="4" inputmode="numeric"></label>
   </fieldset>
   <fieldset data-for="sizetest"><legend>Size-test sheet</legend>
     <label>Square sizes <input name="sizes" value="{{ form.get('sizes', sizes.sizetest_squares) }}" size="30"></label>
   </fieldset>
-  <label>How many (rows / boards) <input name="count" value="{{ form.get('count', '1') }}" size="4" inputmode="numeric"></label>
   <label>First serial (optional) <input name="first_serial" placeholder="S{{ '%04d'|format(next_serial) }}" size="8"></label>
   <button type="submit">Generate PDF</button>
 </form>
@@ -61,15 +64,19 @@
 {% block scripts %}
 <script>
 (function () {
-  var sel = document.getElementById("item");
+  // show only the chosen item's options; hidden inputs are disabled so they are not submitted
+  var sel = document.getElementById("item"), page = document.getElementById("page");
+  var custom = document.getElementById("pagecustom");
   function show() {
     document.querySelectorAll("fieldset[data-for]").forEach(function (f) {
       var on = f.getAttribute("data-for") === sel.value;
       f.hidden = !on;
       f.querySelectorAll("input").forEach(function (i) { i.disabled = !on; });
     });
+    custom.hidden = page.value !== "custom";
+    custom.querySelector("input").disabled = custom.hidden;
   }
-  sel.addEventListener("change", show); show();
+  sel.addEventListener("change", show); page.addEventListener("change", show); show();
 })();
 </script>
 {% endblock %}

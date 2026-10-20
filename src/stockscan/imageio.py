@@ -4,6 +4,11 @@ Geometry (detection, calibration, pose) works on the pixels as stored in
 the file, *before* the EXIF orientation is applied, so one calibration fits
 a camera however the phone was held.  Orientation is applied only for
 display (thumbnails, annotated images).
+
+HEIC: the decoder (pillow-heif) rotates the pixels upright and reports
+orientation 1, keeping the original value in im.info["original_orientation"].
+That rotation is undone here, so HEIC photos look to the rest of the program
+exactly like JPEGs: sensor pixels plus an orientation tag.
 """
 
 from __future__ import annotations
@@ -37,7 +42,11 @@ _TAGS = {
     "focal_mm": (0x920A, True),
     "focal35": (0xA405, True),
     "lens": (0xA434, True),
+    "zoom": (0xA404, True),  # DigitalZoomRatio
 }
+
+# inverse of each EXIF orientation transform (display -> stored pixels)
+_INVERSE = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 8, 7: 7, 8: 6}
 
 
 def is_image_name(name: str) -> bool:
@@ -58,6 +67,8 @@ class PhotoMeta:
     fnumber: float | None = None
     iso: int | None = None
     datetime: str = ""
+    zoom: float | None = None  # digital zoom ratio, if recorded
+    derotated: bool = False  # pixels were rotated by the decoder and turned back here
 
     @property
     def camera(self) -> str:
@@ -100,9 +111,22 @@ def _clean(v):
         return None
 
 
+def _decoder_rotation(im) -> int:
+    """Orientation the decoder already applied to the pixels (HEIC), else 1."""
+    o = im.info.get("original_orientation")
+    try:
+        o = int(o)
+    except (TypeError, ValueError):
+        return 1
+    return o if 2 <= o <= 8 else 1
+
+
 def read_meta(path: Path) -> PhotoMeta:
     with Image.open(path) as im:
         w, h = im.size
+        pre = _decoder_rotation(im)
+        if pre in (5, 6, 7, 8):
+            w, h = h, w
         exif = im.getexif()
         sub = exif.get_ifd(_EXIF_IFD) if exif else {}
         vals = {}
@@ -111,6 +135,9 @@ def read_meta(path: Path) -> PhotoMeta:
             if tag in src:
                 vals[name] = _clean(src[tag])
     meta = PhotoMeta(width=w, height=h)
+    if pre != 1:
+        meta.orientation, meta.derotated = pre, True
+        vals.pop("orientation", None)
     for k, v in vals.items():
         if v is None or v == "":
             continue
@@ -124,15 +151,20 @@ def read_meta(path: Path) -> PhotoMeta:
 
 
 def load_gray(path: Path) -> np.ndarray:
-    """Grayscale uint8, stored orientation."""
+    """Grayscale uint8, stored (sensor) orientation."""
     with Image.open(path) as im:
-        return np.asarray(im.convert("L")).copy()
+        pre = _decoder_rotation(im)
+        a = np.asarray(im.convert("L"))
+    return np.ascontiguousarray(orient(a, _INVERSE[pre])) if pre != 1 else a.copy()
 
 
 def load_bgr(path: Path) -> np.ndarray:
-    """BGR uint8, stored orientation (for annotation)."""
+    """BGR uint8, stored (sensor) orientation (for annotation)."""
     with Image.open(path) as im:
+        pre = _decoder_rotation(im)
         rgb = np.asarray(im.convert("RGB"))
+    if pre != 1:
+        rgb = np.ascontiguousarray(orient(rgb, _INVERSE[pre]))
     return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
 

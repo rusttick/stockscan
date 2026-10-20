@@ -113,16 +113,32 @@ def create_app(data_dir: Path, password: str | None = None, network_warning: str
     def set_page(sid):
         info = get_set_or_404(sid)
         photos = [photo_info(dd, sid, n) for n in dd.photos(sid)]
-        cal_keys = {c.camera_key for c in calib.load_all(dd.cameras_dir)}
+        cals = calib.load_all(dd.cameras_dir)
+        hint = info.extra.get("camera_hint") or None
         for p in photos:
-            p["calibrated"] = p.get("key") in cal_keys
+            p["calibration"] = ""
+            if "error" not in p:
+                meta = imageio.PhotoMeta(**{k: p[k] for k in imageio.PhotoMeta.__dataclass_fields__ if k in p})
+                m = calib.match(dd.cameras_dir, meta, hint, cals)
+                p["calibration"] = m.how if m else ""
+        need_hint = any(p.get("camera") == "unknown camera" for p in photos)
         rows = truth.read(dd.truth_path(sid)) if dd.truth_path(sid).exists() else []
         avail = [(a, analyses.ANALYSES[a][0], analyses.test_code(a, info.type)) for a in analyses.applicable(info.type)]
         others = [s for s in dd.list_sets() if s.id != sid]
-        return render_template("set.html", s=info, photos=photos, truth=rows, analyses=avail,
+        return render_template("set.html", s=info, photos=photos, truth=rows, analyses=avail, cals=cals,
+                               need_hint=need_hint, hint=hint or "",
                                reports=dd.list_reports(sid), jobs=jobs.list(sid), others=others,
                                clicks=dd.clicks(sid), limit_mb=dd.site()["upload_limit_mb"],
                                error=request.args.get("error", ""), msg=request.args.get("msg", ""))
+
+    @app.route("/sets/<sid>/camera_hint", methods=["POST"])
+    def set_camera_hint(sid):
+        get_set_or_404(sid)
+        v = request.form.get("camera_hint", "")
+        if v and v not in {c.file for c in calib.load_all(dd.cameras_dir)}:
+            abort(400)
+        dd.update_set(sid, camera_hint=v)
+        return redirect(url_for("set_page", sid=sid))
 
     @app.route("/sets/<sid>/notes", methods=["POST"])
     def set_notes(sid):
@@ -452,6 +468,9 @@ def t1_line(dd: DataDir) -> str:
     return "SS " + __version__ + " T1 " + " ".join(parts) if parts else ""
 
 
+PHOTO_INFO_FORMAT = 2
+
+
 def photo_info(dd: DataDir, sid: str, name: str) -> dict:
     """Per-photo metadata and sharpness, cached by modification time."""
     src = dd.photo_path(sid, name)
@@ -461,15 +480,16 @@ def photo_info(dd: DataDir, sid: str, name: str) -> dict:
         try:
             with open(cp, encoding="utf-8") as f:
                 d = yaml.safe_load(f) or {}
-            if d.get("mtime") == mtime and d.get("version") == __version__:
+            if d.get("mtime") == mtime and d.get("version") == __version__ and d.get("format") == PHOTO_INFO_FORMAT:
                 return d
         except Exception:
             pass
-    d = {"name": name, "mtime": mtime, "version": __version__, "bytes": src.stat().st_size}
+    d = {"name": name, "mtime": mtime, "version": __version__, "format": PHOTO_INFO_FORMAT, "bytes": src.stat().st_size}
     try:
         m = imageio.read_meta(src)
         d.update({"camera": m.camera, "lens": m.lens_name, "size": f"{m.width}x{m.height}",
                   "key": m.camera_key, "datetime": m.datetime})
+        d.update({k: v for k, v in m.to_dict().items() if k != "camera_key"})
         d["sharpness"] = round(imageio.sharpness(imageio.load_gray(src)), 1)
     except Exception as e:
         d["error"] = f"{type(e).__name__}: {e}"

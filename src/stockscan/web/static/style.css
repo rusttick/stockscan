@@ -40,3 +40,4 @@ pre{background:#fff;border:1px solid var(--line);padding:8px;overflow:auto;font-
 .mtools{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 @media (max-width:600px){main{padding:8px}.thumbs figure{width:46%}}
 fieldset{border:1px solid var(--line);border-radius:4px;display:grid;gap:8px;padding:8px 10px}legend{color:var(--muted)}
+[hidden]{display:none !important}

@@ -234,22 +234,30 @@ SYNTH_MODEL = "synthetic"
 SYNTH_LENS = "virtual lens"
 
 
-def save_photo(img: np.ndarray, path, K=K_TRUE, when: str = "2026:01:01 12:00:00", quality: int = 95):
-    """Write a synthetic photo as JPEG with camera EXIF."""
+def save_photo(img: np.ndarray, path, K=K_TRUE, when: str = "2026:01:01 12:00:00", quality: int = 95,
+               exif: bool = True, zoom: float | None = None, orientation: int = 1):
+    """Write a synthetic photo (JPEG, or HEIC by suffix) with camera EXIF (exif=False: none)."""
     from PIL import Image
 
     h, w = img.shape[:2]
     f35 = K[0, 0] * 43.27 / np.hypot(w, h)
     im = Image.fromarray(img)
+    if str(path).lower().endswith((".heic", ".heif")):
+        im = im.convert("RGB")
+    if not exif:
+        im.save(path, quality=quality)
+        return
     ex = Image.Exif()
     ex[0x010F] = SYNTH_MAKE
     ex[0x0110] = SYNTH_MODEL
-    ex[0x0112] = 1
+    ex[0x0112] = orientation
     sub = ex.get_ifd(0x8769)
     sub[0xA434] = SYNTH_LENS
     sub[0xA405] = int(round(f35))
     sub[0x9003] = when
-    im.save(path, "JPEG", quality=quality, exif=ex)
+    if zoom:
+        sub[0xA404] = float(zoom)
+    im.save(path, quality=quality, exif=ex.tobytes())
 
 
 def _views(canvas, target, n, rng, dist_range=(26, 36), az=35, el=(0, 25)):

@@ -32,6 +32,7 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done, `[-]` dropped.
 | 23 | [x] | **Marker dictionary:** `markers.py` seeded prefix-stable greedy generator, file format with checksum, exhaustive verification, exact and probabilistic guarantees, Monte Carlo validation; shipped `SS8x8_d17_20000`; `stockscan dictionary check/generate` | — | Tests prove the exact guarantees exhaustively on small dictionaries and match the formulas to simulation; self-test re-verifies the shipped file |
 | 24 | [x] | **Fast decoding:** OpenCV finds candidates, stockscan samples cells like OpenCV and decodes in batch | 23 | Same IDs and corners as OpenCV's decoder on synthetic images; ~40x faster |
 | 25 | [x] | **Targets on the new dictionary:** one ID pool; front marker row (no chessboard); ChArUco boards for surfaces; size-test sizes configurable; lengths with units; poster page sizes; multi-page packing; default sizes on the Settings page | 23 | Re-detection, geometry and web tests pass |
+| 26 | [x] | **Tolerate phone/transfer behaviour:** HEIC decoder rotation undone; calibrations adapted to resized, rotated (no EXIF orientation) and digitally zoomed photos; per-set camera hint for photos without EXIF; Inspect warnings (no EXIF, lens change, zoom, mixed sizes) | 6 | Synthetic variants all measured within 0.02 in (0.04 at half size); transforms checked against OpenCV projection |
 
 ## Later (see research.md §7)
 

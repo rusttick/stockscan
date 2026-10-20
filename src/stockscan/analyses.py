@@ -53,24 +53,14 @@ class Ctx:
         self.registry = dd.registry()
         self.info = dd.get_set(set_id)
         self.id_map = self.registry.id_map()
-        self._cals: dict[str, calib.Calibration | None] = {}
+        self.camera_hint = self.info.extra.get("camera_hint") or None
+        self._all_cals = calib.load_all(dd.cameras_dir)
 
     def scale(self, seg: targets.Segment) -> tuple[float, float]:
         return self.site.print_scale(self.registry.get_print(seg.print_serial))
 
-    def calibration(self, meta: imageio.PhotoMeta) -> calib.Calibration | None:
-        key = meta.camera_key
-        if key not in self._cals:
-            self._cals[key] = calib.find(self.dd.cameras_dir, key)
-        return self._cals[key]
-
-    def camera(self, meta: imageio.PhotoMeta):
-        """(K, dist, calibration or None)."""
-        cal = self.calibration(meta)
-        if cal is not None:
-            return cal.K, cal.dist, cal
-        K, dist = pose.approx_intrinsics(meta.width, meta.height, meta.focal35, meta.focal_mm)
-        return K, dist, None
+    def match(self, meta: imageio.PhotoMeta) -> calib.Match | None:
+        return calib.match(self.dd.cameras_dir, meta, self.camera_hint, self._all_cals)
 
 
 @dataclass
@@ -83,16 +73,35 @@ class Photo:
     dist: np.ndarray
     cal: calib.Calibration | None
     det: detect.Detection
+    cam_note: str = ""  # how the calibration was matched / adapted
 
 
 def load_photo(ctx: Ctx, name: str, kinds=None) -> Photo:
     path = ctx.dd.photo_path(ctx.set_id, name)
     meta = imageio.read_meta(path)
     gray = imageio.load_gray(path)
-    K, dist, cal = ctx.camera(meta)
+    m = ctx.match(meta)
+    if m is None:
+        K, dist = pose.approx_intrinsics(meta.width, meta.height, meta.focal35, meta.focal_mm)
+        det = detect.detect(gray, ctx.id_map, None, None, kinds)
+        note = "none: rough lens model from EXIF" if meta.focal35 else "none: rough guess (no EXIF)"
+        return Photo(name, path, meta, gray, K, dist, None, det, note)
+    K, dist, label = m.candidates[0]
+    if len(m.candidates) > 1:
+        # rotation direction unknown: keep the version that fits this photo's targets best
+        det0 = detect.detect(gray, ctx.id_map, None, None, kinds)
+        best = None
+        for Kc, dc, lab in m.candidates:
+            rms = [pz.rms_px for sd in det0.segments.values()
+                   if (pz := pose.segment_pose(sd, Kc, dc, ctx.scale(sd.segment))) is not None]
+            score = float(np.mean(rms)) if rms else np.inf
+            if best is None or score < best[0]:
+                best = (score, Kc, dc, lab)
+        _, K, dist, label = best
     # with a calibration, corner interpolation can use the lens model
-    det = detect.detect(gray, ctx.id_map, K if cal else None, dist if cal else None, kinds)
-    return Photo(name, path, meta, gray, K, dist, cal, det)
+    det = detect.detect(gray, ctx.id_map, K, dist, kinds)
+    note = m.how + (f" ({label})" if label else "")
+    return Photo(name, path, meta, gray, K, dist, m.cal, det, f"{m.cal.file}: {note}")
 
 
 def best_of(ph: Photo, kind: str):
@@ -139,7 +148,7 @@ def display(img_bgr: np.ndarray, meta: imageio.PhotoMeta) -> np.ndarray:
 
 
 def cal_note(ph: Photo) -> str:
-    return f"calibrated ({ph.cal.file})" if ph.cal else "NOT calibrated (rough lens model from EXIF)"
+    return f"calibrated, {ph.cam_note}" if ph.cal else f"NOT calibrated ({ph.cam_note})"
 
 
 def _photo_list(ctx: Ctx) -> list[str]:
@@ -156,8 +165,8 @@ def run_inspect(ctx: Ctx, rep: Report) -> tuple[dict, dict]:
     names = _photo_list(ctx)
     blur_t = float(ctx.site["blur_threshold"])
     rows, seg_rows, agree_rows, images = [], [], [], []
-    n_cal = n_seg = n_blur = 0
-    sharp = []
+    n_cal = n_seg = n_blur = n_adapted = 0
+    sharp, metas = [], {}
     for name in names:
         try:
             ph = load_photo(ctx, name)
@@ -168,7 +177,9 @@ def run_inspect(ctx: Ctx, rep: Report) -> tuple[dict, dict]:
         sharp.append(s)
         clip = imageio.clipped_fraction(ph.gray)
         n_cal += ph.cal is not None
+        n_adapted += ph.cal is not None and not ph.cam_note.endswith(": exact")
         n_blur += s < blur_t
+        metas[name] = ph.meta
         poses = {}
         for sd in ph.det.segments.values():
             pz = pose.segment_pose(sd, ph.K, ph.dist, ctx.scale(sd.segment))
@@ -187,15 +198,19 @@ def run_inspect(ctx: Ctx, rep: Report) -> tuple[dict, dict]:
         rows.append([name, m.camera, m.lens_name, f"{m.width}x{m.height}",
                      fmt(m.exposure_s, 4) if m.exposure_s else "-", m.iso or "-",
                      (fmt(s, 0), "bad" if s < blur_t else ""), fmt(clip * 100, 2),
-                     ph.det.n_markers, len(ph.det.segments), "yes" if ph.cal else ("no", "warn")])
+                     ph.det.n_markers, len(ph.det.segments),
+                     (ph.cam_note, "" if ph.cal and ph.cam_note.endswith(": exact") else "warn")])
         if ph.det.unknown_ids:
             rep_unknown = ", ".join(map(str, ph.det.unknown_ids[:20]))
             rows[-1][0] = f"{name} (unknown IDs: {rep_unknown})"
         images.append((detect.draw(cv2.cvtColor(ph.gray, cv2.COLOR_GRAY2BGR), ph.det), ph.meta, name))
     rep.h2("Photos")
-    rep.p(f"Blurry means sharpness below {blur_t:g} (Settings).")
+    for w in photo_warnings(metas):
+        rep.p(w, "warn")
+    rep.p(f"Blurry means sharpness below {blur_t:g} (Settings). Pixels are as the camera stored them "
+          "(before rotation for display).")
     rep.table(["photo", "camera", "lens", "pixels", "exposure s", "ISO", "sharpness", "clipped %",
-               "markers", "segments", "calibrated"], rows)
+               "markers", "segments", "calibration"], rows)
     rep.h2("Segments seen")
     if seg_rows:
         rep.table(["photo", "segment", "kind", "label", "markers", "corners", "distance ft", "angle deg", "rms px"],
@@ -209,9 +224,36 @@ def run_inspect(ctx: Ctx, rep: Report) -> tuple[dict, dict]:
     rep.h2("Annotated photos")
     for img, meta, name in images:
         rep.image(display(img, meta), name, max_side=1200)
-    fields = {"photos": len(names), "cal": n_cal, "seg_found": n_seg, "blur": n_blur,
+    fields = {"photos": len(names), "cal": n_cal, "adapted": n_adapted, "seg_found": n_seg, "blur": n_blur,
               "sharp_med": float(np.median(sharp)) if sharp else None}
     return fields, {"photos": rows}
+
+
+def photo_warnings(metas: dict[str, imageio.PhotoMeta]) -> list[str]:
+    """Things the phone or the transfer did that the operator should know about."""
+    out = []
+    if not metas:
+        return out
+    no_exif = [n for n, m in metas.items() if m.camera == "unknown camera"]
+    if no_exif:
+        out.append(f"{len(no_exif)} photo(s) have no camera information (EXIF removed by the transfer?): "
+                   f"{', '.join(no_exif[:8])}. Choose a camera calibration for this set on the set page, "
+                   "or copy the original photos by cable / AirDrop with All Photos Data.")
+    lenses = Counter((m.camera, m.lens_name) for m in metas.values() if m.camera != "unknown camera")
+    if len(lenses) > 1:
+        (cam, lens), _ = lenses.most_common(1)[0]
+        odd = [n for n, m in metas.items() if m.camera != "unknown camera" and (m.camera, m.lens_name) != (cam, lens)]
+        out.append(f"{len(odd)} photo(s) taken with a different camera or lens than the rest ({lens}): "
+                   f"{', '.join(odd[:8])}. The phone may have switched lenses (macro / wide / zoom).")
+    zoomed = [n for n, m in metas.items() if m.zoom and m.zoom > 1.001]
+    if zoomed:
+        out.append(f"{len(zoomed)} photo(s) use digital zoom (corrected, but zoom lowers detail): {', '.join(zoomed[:8])}.")
+    sizes = Counter((m.width, m.height) for m in metas.values())
+    if len(sizes) > 1:
+        out.append("Photos have different pixel sizes: " +
+                   ", ".join(f"{a}x{b} ({c})" for (a, b), c in sizes.most_common()) +
+                   ". Some may have been resized by the phone or the transfer.")
+    return out
 
 
 # ---------------------------------------------------------------- calibrate

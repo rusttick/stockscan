@@ -327,15 +327,17 @@ guess how a segment was printed.
 
 ## Camera settings
 
-- **Phone:** save JPEG (iPhone: Settings → Camera → Formats → Most
-  Compatible), main 1× lens only, no zoom, automatic macro switching off
-  (iPhone: Settings → Camera → Macro Control, then keep macro off in the
-  camera app), no portrait mode. Flash off unless a test says otherwise.
+- **Phone:** JPEG or HEIC, main 1× lens only, no zoom, automatic macro
+  switching off (iPhone: Settings → Camera → Macro Control, then keep macro
+  off in the camera app), no portrait mode. Flash off unless a test says
+  otherwise.
 - **Dedicated camera:** JPEG, zoom at one fixed setting (e.g. widest), no
   digital zoom.
 - The software reads camera make, model, lens and image size from the photo
-  metadata (EXIF), picks the matching calibration, and warns when a photo
-  does not match (e.g. the phone switched lenses, or the upload was resized).
+  metadata (EXIF), picks the matching calibration, adapts it where the
+  photo was resized, rotated or zoomed (see "Tolerating what phones and
+  transfers do"), and warns when a photo cannot be matched (e.g. the phone
+  switched lenses).
 
 ## Analyses
 
@@ -350,9 +352,31 @@ guess how a segment was printed.
 
 ### Image loading
 
-Read JPEG (and HEIC if `pillow-heif` is installed), apply EXIF orientation,
-read EXIF camera/lens/focal length/exposure. Internal length unit is the
-inch.
+Read JPEG and HEIC, and read EXIF camera/lens/focal length/exposure/digital
+zoom. Geometry always works on the pixels as the sensor stored them; the
+EXIF orientation is applied only for display. The HEIC decoder rotates
+pixels upright and resets the orientation tag; stockscan turns them back
+(the decoder records the original orientation), so HEIC and JPEG behave
+identically and one calibration fits however the phone was held. Internal
+length unit is the inch.
+
+### Tolerating what phones and transfers do
+
+A calibration is matched by camera and lens (from EXIF), then mapped
+exactly onto the photo when the phone or the transfer has changed it:
+
+| What happened | What stockscan does |
+|---|---|
+| Photo resized (sharing, "small" AirDrop, browser upload) | Scale the calibration, if the shape is unchanged |
+| Pixels rotated without keeping the EXIF orientation | Rotate the calibration; of the two directions, keep the one that fits the photo's targets better |
+| Digital zoom (EXIF DigitalZoomRatio) | Zoom the calibration about the image centre |
+| No EXIF at all | Use the calibration chosen for the set on the set page ("camera hint") |
+| Different lens (macro / wide / telephoto switching), or cropped to another shape | Not matched; reported |
+
+Reports name the adaptation for every photo, and Inspect warns about
+missing EXIF, lens changes, digital zoom and mixed pixel sizes. Tests
+measure synthetic photos rotated both ways, halved, zoomed, stripped of
+EXIF and saved as rotated HEIC: all within 0.02 in (0.013 in at half size).
 
 ### Inspect
 

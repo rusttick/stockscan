@@ -61,6 +61,14 @@
 </div>
 <form method="post" action="{{ url_for('rescan', sid=s.id) }}" class="inline"><button type="submit">Rescan folder</button></form>
 
+{% if need_hint or hint %}
+<form method="post" action="{{ url_for('set_camera_hint', sid=s.id) }}" class="box">
+  Some photos have no camera information. Calibration to use for them:
+  <select name="camera_hint"><option value="">none (rough lens model)</option>
+    {% for c in cals %}<option value="{{ c.file }}" {{ 'selected' if c.file == hint }}>{{ c.camera_key }} ({{ c.created[:10] }})</option>{% endfor %}
+  </select> <button type="submit">Save</button>
+</form>
+{% endif %}
 <div class="thumbs">
 {% for p in photos %}
 <figure>
@@ -69,7 +77,8 @@
     <b>{{ p.name }}</b>{% if clicks.get(p.name) %} &middot; {{ clicks[p.name]|length }} clicked{% endif %}<br>
     {% if p.error %}<span class="bad">{{ p.error }}</span>{% else %}
     {{ p.camera }}<br>{{ p.lens }}<br>{{ p.size }} &middot; sharp {{ p.sharpness }}
-    {% if not p.calibrated %}<br><span class="warn">no calibration</span>{% endif %}{% endif %}
+    {% if not p.calibration %}<br><span class="warn">no calibration</span>
+    {% elif p.calibration != 'exact' %}<br><span class="warn">calibration: {{ p.calibration }}</span>{% endif %}{% endif %}
     <form method="post" action="{{ url_for('delete_photo', sid=s.id, name=p.name) }}" onsubmit="return confirm('Delete {{ p.name }}?')">
       <button class="small" type="submit">delete</button></form>
   </figcaption>
