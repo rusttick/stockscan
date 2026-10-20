@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block body %}
+{% for w in warnings %}<p class="warn box">{{ w }}</p>{% endfor %}
+
+<h1>Today's summary lines</h1>
+{% if lines %}
+<textarea id="lines" class="lines" readonly rows="{{ [lines|length, 12]|min + 1 }}">{{ lines|join('\n') }}</textarea>
+<p><button type="button" data-copy="lines">Copy all</button> <span class="hint">Read these back; nothing else leaves the site.</span></p>
+{% else %}
+<p class="hint">No analyses run today yet.</p>
+{% endif %}
+
+{% if jobs %}
+<h2>Jobs</h2>
+<table id="jobs">
+<tr><th>#</th><th class="l">set</th><th class="l">analysis</th><th class="l">status</th><th class="l">summary</th></tr>
+{% for j in jobs %}
+<tr><td>{{ j.id }}</td><td class="l">{{ j.set_id or '-' }}</td><td class="l">{{ j.analysis }}</td>
+<td class="l {{ 'bad' if j.status == 'failed' else '' }}">{{ j.status }}</td><td class="l mono">{{ j.summary }}</td></tr>
+{% endfor %}
+</table>
+{% endif %}
+
+<h2>Photo sets <a class="button small" href="{{ url_for('new_set') }}">New set</a></h2>
+{% if sets %}
+<table>
+<tr><th class="l">set</th><th class="l">type</th><th>photos</th><th class="l">notes</th><th class="l">created</th></tr>
+{% for s in sets %}
+<tr><td class="l"><a href="{{ url_for('set_page', sid=s.id) }}">{{ s.id }}</a></td><td class="l">{{ s.type_label }}</td>
+<td>{{ counts[s.id] }}</td><td class="l">{{ s.notes|truncate(60) }}</td><td class="l">{{ s.created[:16]|replace('T', ' ') }}</td></tr>
+{% endfor %}
+</table>
+{% else %}
+<p class="hint">No photo sets yet.</p>
+{% endif %}
+
+<h2>Recent analyses</h2>
+{% if reports %}
+<table>
+<tr><th class="l">finished</th><th class="l">set</th><th class="l">analysis</th><th class="l">summary</th></tr>
+{% for r in reports %}
+<tr><td class="l">{{ r.finished[:16]|replace('T', ' ') }}</td><td class="l">{{ r.set }}</td>
+<td class="l"><a href="{{ url_for('report_index', sid=r.set, run=r.run) }}">{{ r.analysis }}</a></td>
+<td class="l mono {{ 'bad' if r.status == 'failed' else '' }}">{{ r.summary }}</td></tr>
+{% endfor %}
+</table>
+{% else %}
+<p class="hint">None yet.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='common.js') }}"></script>{% endblock %}

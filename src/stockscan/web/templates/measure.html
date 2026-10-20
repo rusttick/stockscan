@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Measure {{ s.id }} - stockscan{% endblock %}
+{% block body %}
+<p><a href="{{ url_for('set_page', sid=s.id) }}">&larr; {{ s.id }}</a></p>
+<h1>Measure manually</h1>
+<form method="get" class="inline">
+  <select name="photo" onchange="this.form.submit()">
+    {% for n in names %}<option value="{{ n }}" {{ 'selected' if n == photo }}>{{ n }}{% if clicks.get(n) %} ({{ clicks[n]|length }}){% endif %}</option>{% endfor %}
+  </select>
+</form>
+<p class="hint">Click near a face's <b>top-left</b> corner, then click the exact spot in the zoomed view.
+  Then the same for its <b>bottom-right</b> corner. Go left to right. Wheel or pinch to zoom, drag to pan.
+  Saved automatically.</p>
+{% if photo %}
+<div id="mstatus" class="hint">loading straight-on image...</div>
+<div class="mtools">
+  <button type="button" id="undo">Delete last face</button>
+  <button type="button" id="cancel">Cancel corner</button>
+  <button type="button" id="fit">Fit</button>
+  <form method="post" action="{{ url_for('run_analysis', sid=s.id, analysis='manual') }}" class="inline">
+    <button type="submit">Run manual cross-section report (T5M)</button></form>
+</div>
+<div id="stage" class="stage">
+  <canvas id="cv"></canvas>
+  <canvas id="loupe" class="loupe" width="320" height="320" hidden></canvas>
+</div>
+<table id="flist"></table>
+{% else %}
+<p>No photos in this set.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if photo %}
+<script>window.MEASURE_URL = "{{ url_for('measure_data', sid=s.id, name=photo) }}";</script>
+<script src="{{ url_for('static', filename='measure.js') }}"></script>
+{% endif %}
+{% endblock %}

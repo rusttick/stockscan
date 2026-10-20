@@ -1,0 +1,25 @@
+# Example site settings. The real file is DATA/site.yaml, kept at the site
+# only and edited on the Settings page. Never commit a real site.yaml.
+
+px_per_in: 100.0          # scale of straight-on images (0.01 in per pixel)
+face_offset_in: 0.0       # stock ends stand this far in front of the front marker row
+above_in: 10.0            # straight-on area above the front row, inches
+upload_limit_mb: 100
+blur_threshold: 60.0      # sharpness below this is reported as blurry
+
+# Measured scale bars, per print (serials from the Targets page).
+print_scales:
+  P0001: {x_measured: 15.02, y_measured: 8.01}
+
+# Where each front row or board is mounted (free text).
+segment_labels:
+  S0002: example unit A, shelf 1, front edge
+
+# Defaults for the Targets page; any length with in, cm or mm.
+target_sizes:
+  front_marker: 8cm       # marker side in the front row (beam face)
+  front_gap: 2cm          # space between front-row markers
+  board_square: 10cm      # ChArUco square on surfaces, uprights, panels
+  calib_square: 1.2in
+  sizetest_squares: 2cm 3cm 4cm 5cm 7cm
+  marker_ratio: 0.75      # ChArUco marker side / square side

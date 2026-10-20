@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ s.id }} - stockscan{% endblock %}
+{% block body %}
+<h1>{{ s.name }} <span class="tag">{{ s.type_label }}</span></h1>
+<p class="hint">{{ s.id }} &middot; created {{ s.created[:16]|replace('T', ' ') }}</p>
+{% if error %}<p class="bad box">{{ error }}</p>{% endif %}
+{% if msg %}<p class="ok box">{{ msg }}</p>{% endif %}
+
+<h2>Analyses</h2>
+<div class="actions">
+{% for a, title, code in analyses %}
+  {% if a == 'compare' %}
+  <form method="post" action="{{ url_for('run_analysis', sid=s.id, analysis=a) }}" class="inline">
+    <select name="other"><option value="">compare with set...</option>
+      {% for o in others %}<option value="{{ o.id }}" {{ 'selected' if s.extra.get('compare_with') == o.id }}>{{ o.id }}</option>{% endfor %}
+    </select>
+    <button type="submit">{{ title }} ({{ code }})</button>
+  </form>
+  {% else %}
+  <form method="post" action="{{ url_for('run_analysis', sid=s.id, analysis=a) }}" class="inline">
+    <button type="submit">{{ title }} ({{ code }})</button>
+  </form>
+  {% endif %}
+{% endfor %}
+{% if s.type in ('front', 'back') %}
+  <a class="button" href="{{ url_for('measure', sid=s.id) }}">Measure manually</a>
+{% endif %}
+</div>
+
+<div id="jobbox" data-set="{{ s.id }}">
+{% if jobs %}
+<table>
+<tr><th>#</th><th class="l">analysis</th><th class="l">status</th><th class="l">result</th></tr>
+{% for j in jobs %}
+<tr><td>{{ j.id }}</td><td class="l">{{ j.analysis }}</td><td class="l {{ 'bad' if j.status == 'failed' }}">{{ j.status }}</td>
+<td class="l">{% if j.report %}<a class="mono" href="{{ url_for('report_index', sid=s.id, run=j.report) }}">{{ j.summary }}</a>{% endif %}
+{% if j.error %}<details><summary>error</summary><pre>{{ j.error }}</pre></details>{% endif %}</td></tr>
+{% endfor %}
+</table>
+{% endif %}
+</div>
+
+{% if reports %}
+<h2>Reports</h2>
+<table>
+<tr><th class="l">finished</th><th class="l">analysis</th><th class="l">version</th><th class="l">summary</th></tr>
+{% for r in reports %}
+<tr><td class="l">{{ r.finished[:16]|replace('T', ' ') }}</td>
+<td class="l"><a href="{{ url_for('report_index', sid=s.id, run=r.run) }}">{{ r.analysis }}</a></td>
+<td class="l">{{ r.version }}</td><td class="l mono {{ 'bad' if r.status == 'failed' }}">{{ r.summary }}</td></tr>
+{% endfor %}
+</table>
+{% endif %}
+
+<h2>Photos ({{ photos|length }})</h2>
+<div id="drop" class="drop">
+  <p>Drop photos here, or <label class="button"><input id="picker" type="file" multiple accept="image/*,.heic,.HEIC" hidden>choose files</label></p>
+  <p class="hint">Up to {{ limit_mb|int }} MB per file. Duplicates are skipped. Photos copied into the set's
+    <code>photos</code> folder by hand are picked up by Rescan.</p>
+  <div id="progress"></div>
+</div>
+<form method="post" action="{{ url_for('rescan', sid=s.id) }}" class="inline"><button type="submit">Rescan folder</button></form>
+
+<div class="thumbs">
+{% for p in photos %}
+<figure>
+  <a href="{{ url_for('photo_file', sid=s.id, name=p.name) }}"><img loading="lazy" src="{{ url_for('thumb', sid=s.id, name=p.name) }}" alt=""></a>
+  <figcaption>
+    <b>{{ p.name }}</b>{% if clicks.get(p.name) %} &middot; {{ clicks[p.name]|length }} clicked{% endif %}<br>
+    {% if p.error %}<span class="bad">{{ p.error }}</span>{% else %}
+    {{ p.camera }}<br>{{ p.lens }}<br>{{ p.size }} &middot; sharp {{ p.sharpness }}
+    {% if not p.calibrated %}<br><span class="warn">no calibration</span>{% endif %}{% endif %}
+    <form method="post" action="{{ url_for('delete_photo', sid=s.id, name=p.name) }}" onsubmit="return confirm('Delete {{ p.name }}?')">
+      <button class="small" type="submit">delete</button></form>
+  </figcaption>
+</figure>
+{% endfor %}
+</div>
+
+<h2>Hand measurements</h2>
+<p class="hint">Left to right in the photographed area, inches. Width across the face, height up the face.</p>
+<form method="post" action="{{ url_for('save_truth', sid=s.id) }}">
+<table id="truth">
+<tr><th>#</th><th>width</th><th>height</th><th>length</th><th class="l">note</th></tr>
+{% for r in truth %}
+<tr><td><input name="index" value="{{ r.index }}" size="3"></td><td><input name="width" value="{{ r.width }}" size="7" inputmode="decimal"></td>
+<td><input name="height" value="{{ r.height }}" size="7" inputmode="decimal"></td><td><input name="length" value="{{ r.length if r.length is not none else '' }}" size="7" inputmode="decimal"></td>
+<td><input name="note" value="{{ r.note }}" size="16"></td></tr>
+{% endfor %}
+{% for k in range(3) %}
+<tr><td><input name="index" value="{{ truth|length + k + 1 }}" size="3"></td><td><input name="width" size="7" inputmode="decimal"></td>
+<td><input name="height" size="7" inputmode="decimal"></td><td><input name="length" size="7" inputmode="decimal"></td><td><input name="note" size="16"></td></tr>
+{% endfor %}
+</table>
+<button type="button" id="addrow">Add rows</button> <button type="submit">Save</button>
+{% if truth %}<a href="{{ url_for('truth_csv', sid=s.id) }}">download truth.csv</a>{% endif %}
+</form>
+<form method="post" action="{{ url_for('save_truth', sid=s.id) }}" enctype="multipart/form-data" class="inline">
+  or upload <input type="file" name="csv" accept=".csv,text/csv"> <button type="submit">Upload CSV</button>
+</form>
+
+<h2>Notes</h2>
+<form method="post" action="{{ url_for('set_notes', sid=s.id) }}">
+  <textarea name="notes" rows="3" cols="60">{{ s.notes }}</textarea><br><button type="submit">Save notes</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>window.UPLOAD_URL = "{{ url_for('upload', sid=s.id) }}";</script>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+<script src="{{ url_for('static', filename='upload.js') }}"></script>
+{% endblock %}

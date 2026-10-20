@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Cameras - stockscan{% endblock %}
+{% block body %}
+<h1>Camera calibrations</h1>
+<p class="hint">Photos use the newest calibration with exactly the same camera, lens and image size (from EXIF).</p>
+{% if cals %}
+<table>
+<tr><th class="l">camera | lens | size</th><th>RMS px</th><th>fx</th><th>photos</th><th class="l">from set</th><th class="l">created</th><th></th></tr>
+{% for c in cals %}
+<tr><td class="l">{{ c.camera_key }}</td><td class="{{ 'bad' if c.rms_px > 1 }}">{{ '%.3f'|format(c.rms_px) }}</td>
+<td>{{ '%.1f'|format(c.fx) }}</td><td>{{ c.n_images }}</td>
+<td class="l">{% if c.source_set %}<a href="{{ url_for('set_page', sid=c.source_set) }}">{{ c.source_set }}</a>{% endif %}</td>
+<td class="l">{{ c.created[:16]|replace('T', ' ') }}</td>
+<td><form method="post" action="{{ url_for('delete_camera', fname=c.file) }}" onsubmit="return confirm('Delete this calibration?')"><button class="small">delete</button></form></td></tr>
+{% endfor %}
+</table>
+{% else %}
+<p>None yet. Create a <a href="{{ url_for('new_set', type='calibration') }}">calibration set</a>, upload 15-25 photos of
+  the calibration board and run Calibrate camera.</p>
+{% endif %}
+{% endblock %}

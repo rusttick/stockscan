@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}New set - stockscan{% endblock %}
+{% block body %}
+<h1>New photo set</h1>
+<form method="post" class="form">
+  <label>Name <input name="name" required maxlength="60" placeholder="e.g. phone1 or section-a"></label>
+  <label>Type
+    <select name="type">
+      {% for k, v in set_types.items() %}<option value="{{ k }}" {{ 'selected' if k == preset }}>{{ v }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Notes <textarea name="notes" rows="3"></textarea></label>
+  <p class="hint">Calibration: board photos for test T2. Size test: T3. Plane check: T4. Front: T5M/T5A.
+    Back: T6. Other: e.g. the phone-upload check T8.</p>
+  <button type="submit">Create</button>
+</form>
+{% endblock %}

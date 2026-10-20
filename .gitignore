@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# Site data must never be committed
+data/
+stockscan-data/
+site.yaml
+!examples/site.example.yaml
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
+*.heic
+*.HEIC
+*.heif
+*.png
+*.PNG
+*.tif
+*.tiff
+*.dng
+*.DNG
+*.pdf
+truth.csv
+clicks.yaml
+
+# OS
+.DS_Store
+Thumbs.db

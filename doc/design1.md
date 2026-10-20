@@ -56,12 +56,12 @@ compiled at install time.
 
 ### Python
 
-- Supported: CPython 3.11, 3.12, 3.13. Reference version: 3.12 (the one the
-  lock file is generated and tested with first).
+- Supported: CPython 3.11, 3.12, 3.13. Reference version: 3.13 (the one
+  developed and tested with first).
 - The app always runs in its own virtual environment (`venv`, part of the
   standard library), never in the system Python.
 
-### Dependencies, pinned
+### Dependencies
 
 All open source and AGPL-compatible:
 
@@ -69,52 +69,45 @@ All open source and AGPL-compatible:
 |---|---|---|
 | `numpy` | arrays | BSD-3 |
 | `opencv-python-headless` | computer vision (no GUI libraries needed) | Apache-2.0 |
-| `Pillow` | image I/O, PDF output, thumbnails | MIT-CMU (HPND) |
-| `pillow-heif` | iPhone HEIC photos | BSD-3 (bundles LGPL libheif) |
+| `Pillow` | image I/O, thumbnails | MIT-CMU (HPND) |
+| `pillow-heif` | iPhone HEIC photos (optional at run time) | BSD-3 (bundles LGPL libheif) |
 | `PyYAML` | config and result files | MIT |
 | `Flask` (+ its deps Jinja2, Werkzeug, …) | web app | BSD-3 |
 | `waitress` | web server, pure Python | ZPL-2.1 |
 | `pytest` (dev only) | tests | MIT |
 
-Pinning works in two layers:
-
-1. `pyproject.toml` declares the package and **compatible ranges** (e.g.
-   `Flask>=3.0,<4`), so the code states what it needs.
-2. `requirements.lock` pins **every package, including transitive
-   dependencies, to an exact version with SHA-256 hashes** for all
-   platforms. It is generated with `pip-compile --generate-hashes` (from
-   pip-tools) and committed. `requirements-dev.lock` adds the test tools.
-   Installs use `pip install --require-hashes -r requirements.lock`, so the
-   site gets exactly the tested versions or the install fails loudly.
-
-Updating dependencies is a deliberate step: regenerate the lock files, run
-the tests on all platforms, tag a release.
+`pyproject.toml` declares **compatible version ranges** (e.g.
+`Flask>=3.0,<4`). There are no hash-locked requirement files: the goal is
+an install that works by hand with plain `pip`, not a bit-exact
+environment. The versions actually installed are printed by
+`stockscan selftest` and shown on the dashboard, so they can be read back
+when something behaves differently at the site.
 
 ### Install and use
 
 No install or run scripts. `README.md` documents the steps by hand, for
-Linux/macOS and Windows shells, once the app is built. In outline:
+Linux/macOS and Windows shells. In outline:
 
 1. Create a venv in the repository folder with a supported Python
-   (`python3.12 -m venv .venv`, or `py -3.12 -m venv .venv` on Windows) and
+   (`python3.13 -m venv .venv`, or `py -3.13 -m venv .venv` on Windows) and
    activate it.
-2. `pip install --require-hashes -r requirements.lock`
-3. `pip install --no-deps .`
-4. `stockscan selftest`
-5. `stockscan serve --data DIR`, then open `http://localhost:3000`.
+2. `pip install .`
+3. `stockscan selftest`
+4. `stockscan serve --data DIR`, then open `http://localhost:3000`.
 
 The data directory should be outside the repository folder. Upgrading to a
-new release: download it, then repeat steps 2–4 in the same venv (or a fresh
+new release: download it, then repeat steps 2–3 in the same venv (or a fresh
 one).
 
 ### Offline install
 
-If the site computer cannot reach PyPI, each GitHub release can include a
-wheel bundle per platform (`wheels-<os>-<arch>-py312.zip`), downloaded at
-home with `pip download --only-binary=:all: --platform … --python-version
-3.12 -r requirements.lock`, and installed with `pip install --no-index
---find-links <unzipped folder> --require-hashes -r requirements.lock`.
-Built only for the platforms actually needed.
+If the site computer cannot reach PyPI, download the wheels at home on a
+machine with internet access (`pip download --only-binary=:all: --platform …
+--python-version 3.13 -d wheels . "setuptools>=77"`, plus `colorama` for
+Windows, because pip resolves platform-only dependencies for the machine it
+runs on), copy the folder over, and install with
+`pip install --no-index --find-links wheels .`. The README has the exact
+commands.
 
 ### Portability rules for the code
 
@@ -128,13 +121,11 @@ Built only for the platforms actually needed.
 - On Windows, the first network-reachable start triggers the firewall
   prompt; the README says to allow it on private networks.
 
-### Continuous integration
+### Testing on other platforms
 
-GitHub Actions (free for public repositories) runs the test suite and the
-self-test on Linux, macOS and Windows for each supported Python version on
-every push, installing from the lock file with the same commands the
-README gives. A release is only tagged when all of them pass. This is how
-Windows and Linux get tested without having those machines at home.
+No CI service. The test suite and `stockscan selftest` run at home on macOS
+before a release; on Windows and Linux the site's `stockscan selftest`
+(field test T0) is the platform check.
 
 ### Network exposure
 
@@ -229,6 +220,7 @@ work without a browser:
 | `stockscan serve [--data DIR] [--host H] [--port P] [--password PW]` | Run the web app |
 | `stockscan selftest` | Synthetic tests; check the install before starting the server |
 | `stockscan rerun [--data DIR]` | Re-run all sets; print all summary lines |
+| `stockscan dictionary check [--mc N]` | Re-verify the marker dictionary; print its guarantees |
 
 ## Data directory (at the site only)
 
@@ -255,43 +247,72 @@ A database comes later with the inventory itself.
 
 ### Dictionary and IDs
 
-- OpenCV predefined dictionary `DICT_5X5_1000` (1000 IDs). 5×5 bits keeps
-  the cells larger than 6×6 for a given printed size.
-- IDs 0–99 are reserved for the calibration board and the size-test sheet.
-- From ID 100 up, IDs are allocated in blocks to **strip segments**. Each
-  segment has a serial number printed on it in human-readable form.
-- The block size depends on the segment's layout (a 3 × 21 strip uses 31
-  IDs), so the ID budget depends on page size: about 29 long strips, or
-  about 45 short ones. That is enough for this phase; a larger scheme is a
-  later design decision (see research.md §5).
-- The app records which serials and IDs have been generated, so it never
-  issues the same IDs twice.
+OpenCV's predefined dictionaries stop at 1000 IDs, and the larger ones lose
+error tolerance quickly (measured: `DICT_6X6_1000` has minimum Hamming
+distance 9, OpenCV's own generator gives 7×7 with 4000 IDs at distance 13).
+Covering every surface needs about 10 000 IDs, with room to double. So
+stockscan ships its own dictionary:
+
+- **`SS8x8_d17_20000`**: 20 000 markers of 8 × 8 cells (10 × 10 with the
+  black border), minimum Hamming distance **17** over every pair of markers
+  and every rotation, and between each marker and its own rotations. The
+  file is `src/stockscan/data/SS8x8_d17_20000.txt` (hex codes, SHA-256
+  pinned in code).
+- Generated by a seeded greedy search (`stockscan.markers`). The search is
+  **prefix-stable**: the first k markers never depend on how many are
+  generated, so the dictionary can be extended later without renumbering
+  anything already printed. Generation also rejects nearly uniform patterns
+  (fraction of white cells 30–70 %, enough cell-to-cell transitions).
+- The decoder corrects up to **r = 6** wrong cells. Then:
+  - exact: up to 6 wrong cells are always read correctly (ID and rotation);
+    up to 10 wrong cells are never read as a different marker (they are
+    rejected instead). Checked exhaustively at every self-test.
+  - probabilistic: a random pattern is accepted as some marker with
+    probability 3.6 × 10⁻⁷; with 5 % of cells misread independently,
+    96 % of markers are read, 4 % rejected, 3 × 10⁻¹¹ misidentified.
+    These formulas assume random patterns / independent cell errors (real
+    glare and blur are not independent); the exact guarantees do not.
+  - `stockscan dictionary check [--mc N]` prints all of this, re-verifies
+    the file exhaustively and optionally cross-checks the formulas by
+    Monte Carlo. The tests check the formulas against simulation on small
+    dictionaries, where misidentification is frequent enough to measure.
+- OpenCV's decoder compares a candidate with every marker in turn (~30 ms
+  per candidate at 20 000 markers). stockscan lets OpenCV find the
+  candidate quads, samples their cells the same way OpenCV does, and
+  decodes all candidates at once; tests check that IDs and corners equal
+  OpenCV's own result.
+- **One ID pool.** Every printed object (front row, board, calibration
+  board, size-test patch) is a *segment* with a serial number and a
+  contiguous block of IDs, allocated in order from 0. The app records what
+  it has issued and never issues an ID twice. A board of 10 cm squares on
+  a 60 × 90 cm poster uses about 20 IDs; a front row of 8 cm markers on
+  11 × 17 in paper uses 4.
 
 ### Printed items (Targets page)
 
-All are generated as PDFs at exact physical size. **Page size is an
-input:** letter, tabloid, A4, A3, or custom `WxH` in inches (e.g. `11x17`),
-plus margin (default 0.5 in). Layouts are computed from the page size:
-boards get as many squares as fit, and strips get as long as the page's long
-side allows and are stacked several per page. Every page has a **scale bar**
-with tick marks a known distance apart (the longest round length that fits)
-and the text "PRINT AT 100% / ACTUAL SIZE".
+All are generated as vector PDFs at exact physical size. **Page size is an
+input:** letter, tabloid, A4–A0, ARCH C/D/E, or custom `WxH` with a unit
+(`11x17`, `60x90cm`), plus margin. **All sizes are configurable** and accept
+a unit (`10cm`, `80mm`, `3.15in`); the Settings page holds the defaults
+used by the Targets page. Several rows or boards are packed per page, over
+as many pages as needed. Every page has horizontal and vertical **scale
+bars** and the text "PRINT AT 100% / ACTUAL SIZE".
 
-| Item | Content | Purpose |
-|---|---|---|
-| Calibration board | ChArUco, as many squares of the chosen size (default 1.2 in) as fit the page | Camera calibration; geometry reference card |
-| Size-test sheet | ChArUco patches with squares of 3/8, 1/2, 3/4, 1 in | Find the smallest reliable square size |
-| Strip segments | ChArUco, 3 squares tall × as many as fit the page's long side; square size 1/2 in or 3/4 in | Mounted along shelf edges |
+| Item | Content | Default size | Purpose |
+|---|---|---|---|
+| Front marker row | One row of plain markers, no chessboard, as many as fit the page (or a given number) | 8 cm markers, 2 cm gap | Front face of the shelf beam: the face plane for cross-sections |
+| ChArUco board | As many squares as fit (or given rows × columns) | 10 cm squares | Shelf surfaces, uprights, end panels |
+| Calibration board | ChArUco, as many squares as fit (at most 150 markers) | 1.2 in squares | Camera calibration; plane check |
+| Size-test sheet | ChArUco patches, 4 × 3 squares each | 2, 3, 4, 5, 7 cm | Find the smallest reliable size |
 
-Example: on 11 × 17 in paper a strip of 3/4 in squares is 21 squares
-(15.75 in) long, and four strips fit on a page.
+A marker row has no chessboard corners: its pose uses the four sub-pixel
+corners of each marker, which lie on two parallel lines and so constrain the
+plane's tilt. ChArUco markers are 75 % of the square (configurable).
 
-Strips are 3 squares tall so they have 2 rows of ChArUco corners; a single
-row would leave the plane's tilt poorly constrained.
-
-Each generated segment's geometry (square size, rows, columns, first ID) is
-printed on the page as text and saved as YAML in `targets/`, so the software
-never has to guess how a segment was printed.
+Each segment's geometry (layout, size, rows, columns, first ID, position on
+the page) is printed on the page as text and saved as YAML in `targets/`,
+and the PDF is drawn from that same record, so the software never has to
+guess how a segment was printed.
 
 ### Printing and mounting rules
 
@@ -363,8 +384,8 @@ well their planes agree. This is a free early check on mounting quality.
 
 ### Rectification (removing perspective)
 
-The end faces are assumed to lie in the plane of the front strip, shifted by
-an optional configured offset. The region above the strip is resampled into
+The end faces are assumed to lie in the plane of the front marker row,
+shifted by an optional configured offset. The region above the row is resampled into
 a straight-on image at a fixed scale (default 100 px/in, i.e. 0.01 in/px).
 Measurements in this image are plain pixel distances divided by 100.
 
@@ -377,8 +398,8 @@ in ≥ 95 % of photos, per distance band.
 ### Plane check
 
 The operator holds or props the calibration board against the front ends of
-the stock (in the face plane), with a strip segment in view. The software
-finds the camera pose **from the strip only**, rectifies, then detects the
+the stock (in the face plane), with a front marker row in view. The software
+finds the camera pose **from the front row only**, rectifies, then detects the
 board's corners in the straight-on image and compares their spacing with the
 known spacing. The result is the geometry error by itself, with no face
 detection involved. Expected: < 0.5 % scale error, i.e. < 0.015 in on a
@@ -388,7 +409,7 @@ detection involved. Expected: < 0.5 % scale error, i.e. < 0.015 in on a
 
 Uses shape only, never color:
 
-1. Find the shelf line (bottom of the faces) just above the strip.
+1. Find the shelf line (bottom of the faces) just above the front row.
 2. Find vertical boundaries (sides of faces, seams) from the horizontal
    gradient in a band just above the shelf line, where every face is
    present.
@@ -413,7 +434,7 @@ counts, medians and maxima.
 
 The self-test renders synthetic scenes with known ground truth:
 
-- A strip segment and rectangles of known size in one plane, viewed by a
+- A front marker row and rectangles of known size in one plane, viewed by a
   virtual camera from random positions, with blur and noise.
 - Calibration board views for a known virtual camera.
 
@@ -433,10 +454,10 @@ summary line.
 | **T1** Print scale | Generate and print all items; measure each scale bar; enter on Settings | the measured lengths | within 1 % of nominal (the error is corrected anyway) |
 | **T2** Calibrate | Calibration set: 15–25 photos of the flat calibration board, varied angles, board filling different parts of the frame, at about working distance | `SS … T2 cam=… imgs=… rms=… fx=…` | rms < 1.0 px |
 | **T3** Target size | Tape the size-test sheet where the front ends are. Photograph straight-on and at about 45°, from 2, 4, 6 and 8 ft. Repeat with a clear cover over it if covers are planned. | detection rate per size and distance | choose the smallest size that is ≥ 95 % at working distance |
-| **T4** Geometry | Mount one strip segment along a shelf front. Plane-check set with the calibration board against the stock ends; 5–10 photos from different positions | `SS … T4 n=… scale_med=…% scale_max=…%` | < 0.5 % |
+| **T4** Geometry | Mount one front marker row on a shelf beam face. Plane-check set with the calibration board against the stock ends; 5–10 photos from different positions | `SS … T4 n=… scale_med=…% scale_max=…%` | < 0.5 % |
 | **T5M** Manual cross-section | Front set: choose a section with 10–20 pieces including the smallest and some plate. Hand-measure width and height left to right into the table. Photograph from 2–3 positions. Measure manually. | `SS … T5M n=… w_med w_max h_med h_max` | max ≤ 0.05 in |
 | **T5A** Automatic cross-section | Same set, automatic analysis | `SS … T5A found=…/… w_med w_max h_med h_max` | informative; target ≥ 80 % found, ≤ 0.1 in |
-| **T6** Back photos | Mount a strip segment along the back edge of the same shelf; back set from the back; Inspect | `SS … T6 photos=… seg_found=… blur=…` | collected for later phases |
+| **T6** Back photos | Mount a front marker row on the back beam of the same shelf; back set from the back; Inspect | `SS … T6 photos=… seg_found=… blur=…` | collected for later phases |
 | **T7** Re-run | "Re-run all" | all summary lines | no crashes |
 | **T8** Phone upload | Only if a phone can reach the desktop: upload a few photos from the phone's browser, compare pixel size and EXIF with the same photos copied by cable | `SS … T8 same_size=… exif_lens=…` | full resolution, lens recorded |
 
@@ -449,11 +470,8 @@ cover"), and anything awkward about taking or uploading the photos.
 ```
 LICENSE                 AGPL-3.0
 pyproject.toml          package metadata, compatible dependency ranges
-requirements.lock       exact pins + hashes (pip-compile output)
-requirements-dev.lock   + test tools
 README.md               includes install and usage (written once built)
 .gitignore
-.github/workflows/ci.yml   tests on Linux, macOS, Windows × Python 3.11–3.13
 doc/                    problem.md, research.md, design*.md
 examples/site.example.yaml
 src/stockscan/
@@ -462,7 +480,9 @@ src/stockscan/
   store.py              photo sets, photos, truth.csv, clicks, reports on disk
   jobs.py               background worker, job status
   imageio.py            loading, EXIF, orientation, thumbnails
-  targets.py            dictionary, ID blocks, segment geometry, PDF generation
+  markers.py            marker dictionary: generation, verification, guarantees
+  data/SS8x8_d17_20000.txt   the shipped dictionary (pinned checksum)
+  targets.py            ID pool, segment geometry, page layout, PDF generation
   detect.py             marker / ChArUco detection, grouping into segments
   calib.py              camera calibration
   pose.py               camera pose per segment, plane agreement

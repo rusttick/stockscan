@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Settings - stockscan{% endblock %}
+{% block body %}
+<h1>Settings</h1>
+<p class="hint">Stored in site.yaml in the data directory (at the site only). Lengths accept a unit
+  (<code>10cm</code>, <code>80mm</code>, <code>3.15in</code>); a bare number is inches.</p>
+{% if error %}<p class="bad box">{{ error }}</p>{% endif %}
+{% if t1 %}<p class="summary mono">{{ t1 }}</p>{% endif %}
+<form method="post">
+<h2>Target sizes</h2>
+<p class="hint">Defaults for the Targets page. Change them here once the size test (T3) has shown what works.</p>
+{% set ts = site['target_sizes'] %}
+<div class="form">
+<label>Front row marker size <input name="ts_front_marker" value="{{ ts.front_marker }}" size="10"></label>
+<label>Front row gap between markers <input name="ts_front_gap" value="{{ ts.front_gap }}" size="10"></label>
+<label>ChArUco board square (surfaces, uprights, panels) <input name="ts_board_square" value="{{ ts.board_square }}" size="10"></label>
+<label>Calibration board square <input name="ts_calib_square" value="{{ ts.calib_square }}" size="10"></label>
+<label>Size-test squares <input name="ts_sizetest_squares" value="{{ ts.sizetest_squares }}" size="30"></label>
+<label>ChArUco marker / square ratio <input name="ts_marker_ratio" value="{{ ts.marker_ratio }}" size="6"></label>
+</div>
+
+<h2>Print scale (test T1)</h2>
+<p class="hint">Measure the horizontal and vertical scale bars of each print with a steel rule or calipers,
+  from the 0 tick to the last tick. The software corrects for the difference.</p>
+{% if prints %}
+<table>
+<tr><th class="l">print</th><th class="l">item</th><th>horizontal bar nominal</th><th>measured</th><th>vertical bar nominal</th><th>measured</th></tr>
+{% for p in prints %}{% set m = site['print_scales'].get(p.serial) or {} %}
+<tr><td class="l">{{ p.serial }}</td><td class="l">{{ p.item }} {{ p.page_size }}</td>
+<td>{{ p.scale_bar_in.x_in }} in</td><td><input name="x_{{ p.serial }}" value="{{ m.x_measured if m.x_measured is not none else '' }}" size="8"></td>
+<td>{{ p.scale_bar_in.y_in }} in</td><td><input name="y_{{ p.serial }}" value="{{ m.y_measured if m.y_measured is not none else '' }}" size="8"></td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="hint">No prints yet.</p>{% endif %}
+
+<h2>Processing</h2>
+<div class="form">
+<label>Straight-on scale, px/in <input name="px_per_in" value="{{ site['px_per_in'] }}" size="6"></label>
+<label>Face offset, in (stock ends in front of the front row: positive) <input name="face_offset_in" value="{{ site['face_offset_in'] }}" size="6"></label>
+<label>Straight-on area above the front row, in <input name="above_in" value="{{ site['above_in'] }}" size="6"></label>
+<label>Blurry below sharpness <input name="blur_threshold" value="{{ site['blur_threshold'] }}" size="6"></label>
+<label>Upload limit per file, MB <input name="upload_limit_mb" value="{{ site['upload_limit_mb'] }}" size="6"></label>
+</div>
+
+<h2>Where targets are mounted</h2>
+{% if mounted %}
+<table>
+<tr><th class="l">segment</th><th class="l">kind</th><th class="l">geometry</th><th class="l">label</th></tr>
+{% for sg in mounted %}
+<tr><td class="l">{{ sg.serial }}</td><td class="l">{{ sg.kind }}</td><td class="l">{{ sg.describe() }}</td><td class="l"><input name="label_{{ sg.serial }}" value="{{ site.label(sg.serial) }}" size="30"></td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="hint">No front rows or boards yet.</p>{% endif %}
+<p><button type="submit">Save settings</button></p>
+</form>
+{% endblock %}

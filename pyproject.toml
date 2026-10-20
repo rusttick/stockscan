@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stockscan"
+dynamic = ["version"]
+description = "Photo inventory of machine shop metal stock"
+readme = "README.md"
+license = "AGPL-3.0-only"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26,<3",
+    "opencv-python-headless>=4.8,<6",
+    "Pillow>=10.0,<14",
+    "pillow-heif>=0.16,<2",
+    "PyYAML>=6.0,<7",
+    "Flask>=3.0,<4",
+    "waitress>=3.0,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+stockscan = "stockscan.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "stockscan.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+stockscan = ["web/templates/*.html", "web/static/*", "data/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

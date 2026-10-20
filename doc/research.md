@@ -98,11 +98,10 @@ Suggested placement levels, each improving on the previous:
 | 3 | + vertical strips on the shelf uprights (visible from front and back) | Front and back tied together without hand measurement; L1 multi-view lengths. |
 | 4 | + side margins of the shelf surface, underside of the shelf above, end panels | More targets in every photo, so camera positions are better, plate slots can be measured, angled cuts can be measured, sloppy photos are tolerated. |
 
-ID budget: OpenCV's largest predefined dictionaries have 1000 IDs. A strip of
-13 markers per page allows about 75 pages. Full coverage may need more: options
-are larger squares, a larger generated dictionary saved in the repository, or
-reusing IDs in different areas with segment-level disambiguation. Decide before
-mass printing.
+ID budget: OpenCV's largest predefined dictionaries have 1000 IDs, too few
+for full coverage. Decided in design1.md ("Dictionary and IDs"): a custom
+8 × 8 dictionary of 20 000 markers with minimum Hamming distance 17,
+prefix-stable so it can be extended without renumbering.
 
 Glare: clear polycarbonate covers can reflect light sources into the camera and
 make targets undetectable. Test covered vs. uncovered and matte film; consider

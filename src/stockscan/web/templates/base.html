@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}stockscan{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <nav>
+    <a class="brand" href="{{ url_for('dashboard') }}">stockscan</a>
+    <a href="{{ url_for('new_set') }}">New set</a>
+    <a href="{{ url_for('targets_page') }}">Targets</a>
+    <a href="{{ url_for('cameras') }}">Cameras</a>
+    <a href="{{ url_for('settings') }}">Settings</a>
+    <a href="{{ url_for('selftest_page') }}">Self-test</a>
+  </nav>
+</header>
+<main>
+{% block body %}{% endblock %}
+</main>
+<footer>stockscan {{ version }} &middot; data: {{ data_dir }} &middot;
+  {% for k, v in versions.items() %}{{ k }} {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

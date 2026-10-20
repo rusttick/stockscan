@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Targets - stockscan{% endblock %}
+{% block body %}
+<h1>Targets</h1>
+{% if error %}<p class="bad box">{{ error }}</p>{% endif %}
+<p class="hint">Sizes accept a unit: <code>10cm</code>, <code>80mm</code>, <code>3.15in</code> (a bare number is inches).
+  Defaults come from the <a href="{{ url_for('settings') }}">Settings</a> page.
+  Dictionary {{ dict_name }}: marker IDs left {{ ids_left }} of {{ n_ids }}.</p>
+<form method="post" class="form" id="tform">
+  <label>Item
+    <select name="item" id="item">
+      {% for k, v in items.items() %}<option value="{{ k }}" {{ 'selected' if form.get('item', 'front') == k }}>{{ v }}</option>{% endfor %}
+    </select></label>
+  <label>Page size
+    <select name="page">
+      {% for k, v in pages.items() %}<option value="{{ k }}" {{ 'selected' if form.get('page', 'letter') == k }}>{{ k }} ({{ '%.1f'|format(v[0]) }} x {{ '%.1f'|format(v[1]) }} in)</option>{% endfor %}
+      <option value="custom" {{ 'selected' if form.get('page') == 'custom' }}>custom WxH</option>
+    </select>
+    <input name="page_custom" placeholder="e.g. 24x36 or 60x90cm" size="14" value="{{ form.get('page_custom', '') }}"></label>
+  <label>Margin <input name="margin" value="{{ form.get('margin', '0.5in') }}" size="7"></label>
+
+  <fieldset data-for="front"><legend>Front marker row</legend>
+    <label>Marker size <input name="square_front" value="{{ form.get('square_front', sizes.front_marker) }}" size="8"></label>
+    <label>Gap between markers <input name="gap" value="{{ form.get('gap', sizes.front_gap) }}" size="8"></label>
+    <label>Markers per row (empty = fill the page) <input name="cols" value="{{ form.get('cols', '') }}" size="4" inputmode="numeric"></label>
+  </fieldset>
+  <fieldset data-for="board"><legend>ChArUco board</legend>
+    <label>Square size <input name="square_board" value="{{ form.get('square_board', sizes.board_square) }}" size="8"></label>
+    <label>Squares down / across (empty = fill the page)
+      <span><input name="rows" value="{{ form.get('rows', '') }}" size="4" inputmode="numeric"> x
+      <input name="cols_b" value="{{ form.get('cols_b', '') }}" size="4" inputmode="numeric"></span></label>
+  </fieldset>
+  <fieldset data-for="calib"><legend>Calibration board</legend>
+    <label>Square size <input name="square_calib" value="{{ form.get('square_calib', sizes.calib_square) }}" size="8"></label>
+  </fieldset>
+  <fieldset data-for="sizetest"><legend>Size-test sheet</legend>
+    <label>Square sizes <input name="sizes" value="{{ form.get('sizes', sizes.sizetest_squares) }}" size="30"></label>
+  </fieldset>
+  <label>How many (rows / boards) <input name="count" value="{{ form.get('count', '1') }}" size="4" inputmode="numeric"></label>
+  <label>First serial (optional) <input name="first_serial" placeholder="S{{ '%04d'|format(next_serial) }}" size="8"></label>
+  <button type="submit">Generate PDF</button>
+</form>
+<p class="hint">Print at 100 % ("actual size"), matte paper. Measure both scale bars on every page and enter them on
+  the Settings page. Mount flat and rigid. Each row and board has its own serial and marker IDs; never print the
+  same PDF twice for two places.</p>
+
+<h2>Generated</h2>
+{% if prints %}
+<table>
+<tr><th class="l">print</th><th class="l">item</th><th class="l">page</th><th>pages</th><th class="l">segments</th><th class="l">created</th><th class="l">files</th></tr>
+{% for p in prints %}
+<tr><td class="l">{{ p.serial }}</td><td class="l">{{ p.item }}</td><td class="l">{{ p.page_size }}</td><td>{{ p.pages }}</td>
+<td class="l">{% for sg in p.segments %}{{ sg.serial }}: {% if sg.layout == 'row' %}{{ sg.squares_x }} markers {{ fmt_length(sg.marker_in) }}{% else %}{{ sg.squares_x }}x{{ sg.squares_y }} @ {{ fmt_length(sg.square_in) }}{% endif %}, ids {{ sg.first_id }}-{{ sg.first_id + (sg.squares_x if sg.layout == 'row' else (sg.squares_x * sg.squares_y) // 2) - 1 }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+<td class="l">{{ p.created[:16]|replace('T', ' ') }}</td>
+<td class="l"><a href="{{ url_for('target_file', fname=p.file) }}">PDF</a> &middot;
+  <a href="{{ url_for('target_file', fname=p.file[:-4] + '.yaml') }}">geometry</a></td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="hint">Nothing generated yet.</p>{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var sel = document.getElementById("item");
+  function show() {
+    document.querySelectorAll("fieldset[data-for]").forEach(function (f) {
+      var on = f.getAttribute("data-for") === sel.value;
+      f.hidden = !on;
+      f.querySelectorAll("input").forEach(function (i) { i.disabled = !on; });
+    });
+  }
+  sel.addEventListener("change", show); show();
+})();
+</script>
+{% endblock %}

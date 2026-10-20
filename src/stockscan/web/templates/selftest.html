@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Self-test - stockscan{% endblock %}
+{% block body %}
+<h1>Self-test</h1>
+<p class="hint">Synthetic tests: no site data used. The same as <code>stockscan selftest</code> (without the web checks).</p>
+<form method="post"><button type="submit">Run self-test</button></form>
+{% for j in jobs[:3] %}
+<p>Job {{ j.id }}: <span class="{{ 'bad' if j.status == 'failed' }}">{{ j.status }}</span> <span class="mono">{{ j.summary }}</span></p>
+{% if j.error %}<pre>{{ j.error }}</pre>{% endif %}
+{% endfor %}
+{% if output %}<h2>Last output</h2><pre>{{ output }}</pre>{% endif %}
+{% endblock %}
+{% block scripts %}{% if jobs and jobs[0].status in ('queued', 'running') %}<script>setTimeout(function(){location.reload()}, 3000)</script>{% endif %}{% endblock %}
